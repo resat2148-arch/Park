@@ -1,0 +1,696 @@
+<title>Park Sinyal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: phone-shaped single column; map fills the middle, a bottom sheet holds the current task. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --fg: #16202b;
+  --muted: #5d6b79;
+  --line: #d6dde4;
+  --sign: #1f4fbf;        /* Türk trafik levhası mavisi: P işareti */
+  --sign-ink: #ffffff;
+  --go: #15803d;          /* senin için ayrıldı / başarı */
+  --wait: #b45309;        /* başkası yolda */
+  --soon: #0e7490;        /* birazdan boşalacak */
+  --danger: #b91c1c;
+  --road: #ffffff;
+  --road-edge: #cfd6de;
+  --block: #e2e6ea;
+  --building: #d3d9df;
+  --park: #cfe5c9;
+  --sea: #bcd9ec;
+  --car: #8b96a3;
+  --mine: #16202b;
+  --map-label: #7a8794;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #18212b; --fg: #e8eef4; --muted: #9aa8b6; --line: #2a3542;
+    --sign: #3b6fe0; --go: #22a35a; --wait: #e08a2c; --soon: #22a3c2; --danger: #ef5350;
+    --road: #2b3540; --road-edge: #3a4652; --block: #1b232c; --building: #222c37;
+    --park: #1f3324; --sea: #16303f; --car: #5d6a78; --mine: #e8eef4; --map-label: #7d8b99;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #18212b; --fg: #e8eef4; --muted: #9aa8b6; --line: #2a3542;
+  --sign: #3b6fe0; --go: #22a35a; --wait: #e08a2c; --soon: #22a3c2; --danger: #ef5350;
+  --road: #2b3540; --road-edge: #3a4652; --block: #1b232c; --building: #222c37;
+  --park: #1f3324; --sea: #16303f; --car: #5d6a78; --mine: #e8eef4; --map-label: #7d8b99;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; }
+.app {
+  height: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column;
+  padding-inline: 12px; padding-block: 10px; box-sizing: border-box; gap: 10px;
+}
+header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.brand .sign {
+  width: 30px; height: 30px; border-radius: 5px; background: var(--sign); color: var(--sign-ink);
+  display: grid; place-items: center; font: 800 22px/1 var(--font-display); box-shadow: inset 0 0 0 2px var(--sign-ink), 0 0 0 1.5px var(--sign);
+}
+.brand h1 { font: 800 24px/1 var(--font-display); letter-spacing: .01em; margin: 0; }
+.live { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.live.on i { background: var(--go); box-shadow: 0 0 0 3px color-mix(in srgb, var(--go) 25%, transparent); }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+.tabs button {
+  border: 0; background: none; color: var(--muted); font: 700 15px/1 var(--font-body); padding: 10px 6px; border-radius: 9px; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
+.tabs button:focus-visible, .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--sign); outline-offset: 2px; }
+.map { flex: 1; min-height: 0; position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--block); }
+.map svg { width: 100%; height: 100%; display: block; touch-action: manipulation; }
+.map .tag { position: absolute; left: 8px; bottom: 8px; font-size: 11px; color: var(--muted); background: var(--surface); padding: 3px 7px; border-radius: 6px; opacity: .92; }
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; max-height: 48%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.sheet h2 { font: 700 21px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+.sheet p { margin: 0; color: var(--muted); line-height: 1.4; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > .btn { flex: 1 1 140px; }
+.btn {
+  min-height: 46px; border-radius: 11px; border: 0; padding: 0 14px; cursor: pointer;
+  font: 700 15px/1.1 var(--font-body); background: var(--sign); color: var(--sign-ink);
+}
+.btn.go { background: var(--go); color: #fff; }
+.btn.soon { background: var(--soon); color: #fff; }
+.btn.dark { background: var(--fg); color: var(--bg); }
+.btn.ghost { background: none; color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--line); }
+.btn.warn { background: none; color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger); }
+.btn:disabled { opacity: .5; cursor: default; }
+.link { background: none; border: 0; color: var(--muted); text-decoration: underline; font: 500 14px var(--font-body); cursor: pointer; align-self: center; padding: 4px; }
+.meta { font: 600 13px/1.3 var(--font-body); color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg); }
+.chip.go { background: color-mix(in srgb, var(--go) 16%, transparent); color: var(--go); }
+.chip.wait { background: color-mix(in srgb, var(--wait) 18%, transparent); color: var(--wait); }
+.chip.sign { background: color-mix(in srgb, var(--sign) 16%, transparent); color: var(--sign); }
+.sensor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.sensor div { border: 1px solid var(--line); border-radius: 10px; padding: 7px 8px; min-width: 0; }
+.sensor small { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.sensor b { font: 700 16px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.log { font: 500 12px/1.5 var(--font-mono); color: var(--muted); background: color-mix(in srgb, var(--fg) 5%, transparent); border-radius: 10px; padding: 8px 10px; max-height: 120px; overflow-y: auto; }
+.log .ev { color: var(--fg); font-weight: 700; }
+.log .hit { color: var(--go); font-weight: 700; }
+.toast {
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 12px); transform: translate(-50%, -140%);
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; z-index: 10;
+  transition: transform .25s ease; max-width: calc(100% - 32px); box-sizing: border-box; text-align: center;
+}
+.toast.show { transform: translate(-50%, 0); }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+/* SVG */
+.pin { cursor: pointer; }
+.pin .ring { fill: none; stroke: var(--sign); stroke-width: 2; opacity: .5; }
+.bay-free { cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) {
+  .pin.fresh .ring { animation: pulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes pulse { from { transform: scale(.8); opacity: .8; } to { transform: scale(1.9); opacity: 0; } }
+}
+</style>
+
+<div class="app">
+  <header>
+    <div class="brand"><span class="sign" aria-hidden="true">P</span><h1>Park Sinyal</h1></div>
+    <span class="live" id="live"><i></i><span id="liveText">Bağlanıyor…</span></span>
+  </header>
+  <div class="tabs" role="tablist">
+    <button id="tabSeek" role="tab" aria-selected="true">Yer arıyorum</button>
+    <button id="tabCar" role="tab" aria-selected="false">Aracım</button>
+  </div>
+  <div class="map" id="mapWrap">
+    <svg id="map" viewBox="0 0 360 500" preserveAspectRatio="xMidYMid meet" aria-label="Moda çevresi örnek harita">
+      <g id="base"></g>
+      <g id="bays"></g>
+      <g id="route"></g>
+      <g id="pins"></g>
+      <g id="actors"></g>
+    </svg>
+    <span class="tag">Örnek harita · ölçek 1 kare ≈ 2,5 m</span>
+  </div>
+  <section class="sheet" id="sheet" aria-live="polite"></section>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script id="detector">
+/* Uygulamadaki src/detection/departureDetector.ts ile aynı mantık (konumlar metre cinsinden düzlemde). */
+const CFG = {
+  maxAccuracyM: 50, drivingSpeed: 5.5, drivingSpeedWithMotion: 2.5, drivingStreakRequired: 2,
+  stoppedSpeed: 1.5, walkMaxSpeed: 2.5, walkAwayDistance: 40, walkAwayMinMs: 20000,
+  departureRadius: 200, awayDistance: 120, returnDistance: 35,
+};
+const INITIAL = { phase: 'idle', drivingStreak: 0, driveStart: null, stop: null, parked: null, wentAway: false, returnNotified: false, last: null };
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const pt = (p) => ({ x: p.x, y: p.y });
+function effSpeed(last, s) {
+  if (s.speed != null && s.speed >= 0) return s.speed;
+  if (!last) return 0;
+  const dt = (s.t - last.t) / 1000;
+  return dt > 0 ? dist(last, s) / dt : 0;
+}
+function step(state, s, cfg = CFG) {
+  if (s.accuracy != null && s.accuracy > cfg.maxAccuracyM) return { state, events: [] };
+  const events = [];
+  const speed = effSpeed(state.last, s);
+  const automotive = s.motion === 'automotive';
+  const onFoot = s.motion === 'walking' || s.motion === 'running' || s.motion === 'cycling';
+  const isDriving = !onFoot && (speed >= cfg.drivingSpeed || (automotive && speed >= cfg.drivingSpeedWithMotion));
+  const next = { ...state, drivingStreak: isDriving ? state.drivingStreak + 1 : 0, driveStart: isDriving ? (state.driveStart || pt(s)) : null, last: s };
+  const confirmed = next.drivingStreak >= cfg.drivingStreakRequired;
+  if (state.phase === 'parked' && state.parked) {
+    const spot = state.parked;
+    if (confirmed) {
+      if (dist(next.driveStart, spot) <= cfg.departureRadius) events.push({ type: 'departed', spot, at: s.t });
+      return { state: { ...next, phase: 'driving', parked: null, stop: null, wentAway: false, returnNotified: false }, events };
+    }
+    const d = dist(s, spot);
+    if (d >= cfg.awayDistance) next.wentAway = true;
+    if (next.wentAway && !next.returnNotified && d <= cfg.returnDistance) { next.returnNotified = true; events.push({ type: 'returningToCar', spot }); }
+    return { state: next, events };
+  }
+  if (confirmed) next.phase = 'driving';
+  if (next.phase !== 'driving') return { state: next, events };
+  if (isDriving || speed > cfg.walkMaxSpeed || (automotive && speed > cfg.stoppedSpeed)) next.stop = null;
+  else if (!next.stop && speed <= cfg.stoppedSpeed) next.stop = { ...pt(s), at: s.t };
+  if (next.stop && !automotive) {
+    const walked = dist(next.stop, s) - (s.accuracy || 0);
+    if (walked >= cfg.walkAwayDistance && s.t - next.stop.at >= cfg.walkAwayMinMs) {
+      const spot = { ...pt(next.stop), since: next.stop.at, source: 'auto' };
+      events.push({ type: 'parked', spot });
+      return { state: { ...next, phase: 'parked', parked: spot, stop: null, wentAway: false, returnNotified: false }, events };
+    }
+  }
+  return { state: next, events };
+}
+function markParked(state, at, now) {
+  return { ...state, phase: 'parked', parked: { ...pt(at), since: now, source: 'manual' }, stop: null, drivingStreak: 0, driveStart: null, wentAway: false, returnNotified: false };
+}
+</script>
+
+<script>
+(() => {
+'use strict';
+const SVGNS = 'http://www.w3.org/2000/svg';
+const M_PER_UNIT = 2.5;
+const W = 360, H = 500;
+const H_STREETS = [{ y: 70, name: 'MODA CD.' }, { y: 200, name: 'BAHARİYE CD.' }, { y: 330, name: 'KADİFE SK.' }, { y: 450, name: 'ŞAİR NEFİ SK.' }];
+const V_STREETS = [{ x: 50, name: 'MÜHÜRDAR CD.' }, { x: 185, name: 'HALİTAĞA CD.' }, { x: 315, name: 'DR. ESAT IŞIK CD.' }];
+const ROAD = 20;
+const ME = { x: 185, y: 268 }; // yer arayanın (senin) örnek konumun
+const SIGNAL_TTL = 10 * 60000;
+
+// ---------- küçük yardımcılar ----------
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const h = (tag, props = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const k in props) {
+    if (k === 'onclick') n.addEventListener('click', props[k]);
+    else if (k === 'text') n.textContent = props[k];
+    else n.setAttribute(k, props[k]);
+  }
+  for (const k of kids) if (k != null && k !== false) n.append(k);
+  return n;
+};
+const meters = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) * M_PER_UNIT;
+const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`);
+const mins = (ms) => Math.max(0, Math.ceil(ms / 60000));
+const ago = (from, now) => { const m = Math.floor((now - from) / 60000); return m < 1 ? 'az önce' : `${m} dk önce`; };
+const hash = (s) => { let x = 2166136261; for (const c of s) { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619); } return x >>> 0; };
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem('ps:' + k)); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem('ps:' + k) : localStorage.setItem('ps:' + k, JSON.stringify(v)); } catch { /* yok */ } },
+};
+// Her cihaz ayrı bir sürücü: aynı hesapla iki telefondan denenebilsin.
+const DEVICE = store.get('device') || (() => { const id = 'd' + Math.random().toString(36).slice(2, 10); store.set('device', id); return id; })();
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ---------- harita: sokaklar ve park cepleri ----------
+const bays = [];
+(function buildBays() {
+  H_STREETS.forEach((s, i) => {
+    for (const side of [-1, 1]) for (let x = 12, k = 0; x < W - 6; x += 15, k++) {
+      if (V_STREETS.some((v) => Math.abs(x - v.x) < ROAD)) continue;
+      bays.push({ id: `h${i}${side > 0 ? 'b' : 'a'}${k}`, x, y: s.y + side * 6.5, horiz: true, street: s.name });
+    }
+  });
+  V_STREETS.forEach((s, i) => {
+    for (const side of [-1, 1]) for (let y = 12, k = 0; y < H - 6; y += 15, k++) {
+      if (H_STREETS.some((hs) => Math.abs(y - hs.y) < ROAD)) continue;
+      bays.push({ id: `v${i}${side > 0 ? 'b' : 'a'}${k}`, x: s.x + side * 6.5, y, horiz: false, street: s.name });
+    }
+  });
+})();
+const bayById = new Map(bays.map((b) => [b.id, b]));
+const occupiedStatic = (b) => hash(b.id) % 100 < 64;
+const titleCase = (s) => s.toLocaleLowerCase('tr').replace(/(^|\s)(\S)/g, (m, a, c) => a + c.toLocaleUpperCase('tr'));
+
+function drawBase() {
+  const g = $('base');
+  el('rect', { x: 0, y: 0, width: W, height: H, fill: 'var(--block)' }, g);
+  // Bloklar (bina kümeleri)
+  const xs = [0, ...V_STREETS.map((v) => v.x), W], ys = [0, ...H_STREETS.map((s) => s.y), H];
+  for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < ys.length - 1; j++) {
+    const x0 = xs[i] + ROAD / 2 + 5, x1 = xs[i + 1] - ROAD / 2 - 5, y0 = ys[j] + ROAD / 2 + 5, y1 = ys[j + 1] - ROAD / 2 - 5;
+    if (x1 - x0 < 8 || y1 - y0 < 8) continue;
+    const park = i === 2 && j === 2;
+    el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, rx: 4, fill: park ? 'var(--park)' : 'var(--building)' }, g);
+    if (park) {
+      const t = el('text', { x: (x0 + x1) / 2, y: (y0 + y1) / 2 + 3, 'text-anchor': 'middle', fill: 'var(--map-label)', 'font-size': 8, 'font-family': 'var(--font-body)', 'font-weight': 600 }, g);
+      t.textContent = 'Yoğurtçu Parkı';
+    }
+  }
+  // Deniz
+  el('path', { d: `M0 ${H - 90} Q 34 ${H - 60} 24 ${H} L0 ${H} Z`, fill: 'var(--sea)' }, g);
+  // Yollar
+  H_STREETS.forEach((s) => {
+    el('rect', { x: 0, y: s.y - ROAD / 2 - 1, width: W, height: ROAD + 2, fill: 'var(--road-edge)' }, g);
+    el('rect', { x: 0, y: s.y - ROAD / 2, width: W, height: ROAD, fill: 'var(--road)' }, g);
+  });
+  V_STREETS.forEach((s) => {
+    el('rect', { x: s.x - ROAD / 2 - 1, y: 0, width: ROAD + 2, height: H, fill: 'var(--road-edge)' }, g);
+    el('rect', { x: s.x - ROAD / 2, y: 0, width: ROAD, height: H, fill: 'var(--road)' }, g);
+  });
+  // Sokak adları
+  H_STREETS.forEach((s) => {
+    const t = el('text', { x: 118, y: s.y - ROAD / 2 - 4, 'text-anchor': 'middle', fill: 'var(--map-label)', 'font-size': 7.5, 'letter-spacing': 1, 'font-family': 'var(--font-display)', 'font-weight': 700 }, g);
+    t.textContent = s.name;
+  });
+  V_STREETS.forEach((s) => {
+    const t = el('text', { x: s.x + ROAD / 2 + 4, y: 140, fill: 'var(--map-label)', 'font-size': 7.5, 'letter-spacing': 1, 'font-family': 'var(--font-display)', 'font-weight': 700, transform: `rotate(90 ${s.x + ROAD / 2 + 4} 140)` }, g);
+    t.textContent = s.name;
+  });
+}
+
+// ---------- veri katmanı: paylaşımlı db, yoksa yalnızca bu cihazda ----------
+const Data = {
+  db: null, col: null, docs: new Map(), listeners: new Set(), readOnly: false, ready: false,
+  emit() { this.listeners.forEach((f) => f()); },
+  list() { return [...this.docs.values()]; },
+  async connect() {
+    try {
+      const db = window.claude && window.claude.use ? await window.claude.use('db') : null;
+      if (!db) { setLive(false); return; }
+      this.db = db; this.col = db.collection('signals');
+      let first = true;
+      this.col.onSnapshot((snap) => {
+        this.docs = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }]));
+        this.ready = true; setLive(true);
+        onSignalsChanged(first); first = false;
+        this.emit();
+      }, () => { setLive(false); });
+    } catch { setLive(false); }
+  },
+  async write(fn) {
+    try { await fn(); return true; }
+    catch (e) {
+      if (e && e.code === 'invalid_argument') { this.readOnly = true; toast('Bu linkte yalnızca görüntüleme iznin var.'); }
+      else toast('Bağlantı hatası, tekrar dene.');
+      return false;
+    }
+  },
+  async put(doc) {
+    if (!this.col) { this.docs.set(doc.id, doc); onSignalsChanged(false); this.emit(); return true; }
+    return this.write(() => this.col.doc(doc.id).set(doc));
+  },
+  async patch(id, p) {
+    if (!this.col) { const d = this.docs.get(id); if (d) this.docs.set(id, { ...d, ...p }); this.emit(); return true; }
+    return this.write(() => this.col.doc(id).update(p));
+  },
+  /** "Gidiyorum": aynı yere iki kişi gitmesin diye kısa kilitle sahiplen. */
+  async claim(id) {
+    const now = Date.now();
+    const ok = (d) => d && d.status === 'active' && d.expiresAt > now && d.ownerId !== DEVICE;
+    const claimPatch = (d) => ({ status: 'claimed', claimedBy: DEVICE, claimedAt: now, expiresAt: Math.max(d.expiresAt, now + SIGNAL_TTL) });
+    if (!this.col) { const d = this.docs.get(id); if (!ok(d)) return false; return this.patch(id, claimPatch(d)); }
+    const ref = this.col.doc(id);
+    try {
+      const lease = await ref.acquire({ holder: DEVICE, ttlMs: 4000 });
+      if (!lease.acquired) return false;
+      const snap = await ref.get();
+      const d = snap.exists ? snap.data() : null;
+      if (!ok(d)) return false;
+      await ref.update(claimPatch(d));
+      return true;
+    } catch (e) { if (e && e.code === 'invalid_argument') { this.readOnly = true; toast('Bu linkte yalnızca görüntüleme iznin var.'); } return false; }
+  },
+  /** Süresi çoktan dolmuş eski kayıtları temizler (yeni sinyal yayınlanırken). */
+  async prune() {
+    if (!this.col) return;
+    const old = this.list().filter((d) => d.expiresAt < Date.now() - 3600000).slice(0, 10);
+    for (const d of old) { try { await this.col.doc(d.id).delete(); } catch { /* sorun değil */ } }
+  },
+};
+
+function setLive(on) {
+  $('live').classList.toggle('on', on);
+  $('liveText').textContent = on ? 'Canlı · paylaşımlı' : 'Yalnızca bu cihaz';
+}
+
+// ---------- uygulama durumu ----------
+const S = {
+  tab: store.get('tab') === 'car' ? 'car' : 'seek',
+  selectedId: null,
+  car: store.get('car'),           // {bayId, since, source}
+  sim: null,                       // çalışan simülasyon
+  seen: new Set(),
+};
+const now = () => Date.now();
+const live = () => Data.list().filter((d) => (d.status === 'active' || d.status === 'claimed') && d.expiresAt > now());
+const mySignal = () => live().filter((d) => d.ownerId === DEVICE).sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+const myClaim = () => live().find((d) => d.claimedBy === DEVICE && d.status === 'claimed') || null;
+const takenBays = () => new Set(Data.list().filter((d) => d.status === 'taken' && d.takenAt > now() - 3600000).map((d) => d.bayId));
+
+function setCar(car) { S.car = car; store.set('car', car); }
+
+function onSignalsChanged(initial) {
+  const fresh = live().filter((d) => d.status === 'active' && d.ownerId !== DEVICE && !S.seen.has(d.id));
+  if (!initial && fresh.length) {
+    const near = fresh.reduce((a, b) => (meters(a, ME) <= meters(b, ME) ? a : b));
+    toast(`Yakınında yer boşaldı · ${fmtDist(meters(near, ME))}`);
+    try { navigator.vibrate && navigator.vibrate([0, 160, 80, 160]); } catch { /* yok */ }
+  }
+  Data.list().forEach((d) => S.seen.add(d.id));
+}
+
+async function publish(bay, source, leavingInMin = 0) {
+  const t = now();
+  // Bir cihazın aynı anda tek canlı sinyali olur.
+  for (const d of live().filter((x) => x.ownerId === DEVICE && x.status === 'active')) await Data.patch(d.id, { status: 'cancelled' });
+  const id = 's' + t.toString(36) + Math.random().toString(36).slice(2, 6);
+  const ok = await Data.put({
+    id, bayId: bay.id, x: bay.x, y: bay.y, street: bay.street, source, leavingInMin, status: 'active',
+    ownerId: DEVICE, claimedBy: null, createdAt: t, expiresAt: t + SIGNAL_TTL + leavingInMin * 60000,
+  });
+  void Data.prune();
+  return ok;
+}
+
+// ---------- çizim ----------
+function drawBays() {
+  const g = $('bays'); g.replaceChildren();
+  const signalBays = new Set(live().map((d) => d.bayId));
+  const taken = takenBays();
+  const carBay = S.car && !(S.sim && S.sim.phase === 'drive') ? S.car.bayId : null;
+  const pickable = S.tab === 'car' && !S.car && !S.sim;
+  for (const b of bays) {
+    const w = b.horiz ? 11 : 5, hh = b.horiz ? 5 : 11;
+    const x = b.x - w / 2, y = b.y - hh / 2;
+    if (b.id === carBay) {
+      el('rect', { x: x - 1, y: y - 1, width: w + 2, height: hh + 2, rx: 2, fill: 'var(--mine)' }, g);
+      continue;
+    }
+    if (signalBays.has(b.id)) continue;
+    if (occupiedStatic(b) || taken.has(b.id)) {
+      el('rect', { x, y, width: w, height: hh, rx: 1.5, fill: 'var(--car)', opacity: 0.75 }, g);
+    } else if (pickable) {
+      const r = el('rect', { x: x - 1, y: y - 1, width: w + 2, height: hh + 2, rx: 2, fill: 'var(--sign)', 'fill-opacity': 0.12, stroke: 'var(--sign)', 'stroke-width': 0.8, 'stroke-dasharray': '2 1.5', class: 'bay-free', role: 'button', 'aria-label': `${titleCase(b.street)} üzerinde boş cep` }, g);
+      r.addEventListener('click', (e) => { e.stopPropagation(); parkAt(b, 'manual'); });
+    }
+  }
+}
+
+function drawPins() {
+  const g = $('pins'); g.replaceChildren();
+  const r = $('route'); r.replaceChildren();
+  const t = now();
+  const claim = myClaim();
+  if (S.tab === 'seek' && claim) {
+    el('line', { x1: ME.x, y1: ME.y, x2: claim.x, y2: claim.y, stroke: 'var(--go)', 'stroke-width': 2.5, 'stroke-dasharray': '5 4', 'stroke-linecap': 'round' }, r);
+  }
+  const list = live().sort((a, b) => b.y - a.y);
+  for (const d of list) {
+    const readyAt = d.createdAt + d.leavingInMin * 60000;
+    const mine = d.ownerId === DEVICE, mineClaim = d.claimedBy === DEVICE;
+    const claimedOther = d.status === 'claimed' && !mineClaim;
+    const color = mineClaim ? 'var(--go)' : claimedOther ? 'var(--wait)' : readyAt > t ? 'var(--soon)' : 'var(--sign)';
+    const label = claimedOther ? 'yolda' : mineClaim ? 'senin' : readyAt > t ? `${mins(readyAt - t)} dk` : (t - readyAt < 60000 ? 'şimdi' : `${Math.floor((t - readyAt) / 60000)} dk`);
+    const sel = d.id === S.selectedId;
+    const pin = el('g', { class: 'pin' + (t - d.createdAt < 60000 && d.status === 'active' ? ' fresh' : ''), transform: `translate(${d.x} ${d.y})`, role: 'button', tabindex: 0, 'aria-label': `Park yeri, ${label}` }, g);
+    el('circle', { class: 'ring', cx: 0, cy: -16, r: 11 }, pin);
+    const s = sel ? 1.25 : 1;
+    const inner = el('g', { transform: `scale(${s})` }, pin);
+    el('path', { d: 'M0 0 L-4 -6 L4 -6 Z', fill: color }, inner);
+    el('rect', { x: -10, y: -26, width: 20, height: 20, rx: 3.5, fill: color, stroke: 'var(--sign-ink)', 'stroke-width': 1.6 }, inner);
+    const p = el('text', { x: 0, y: -10.5, 'text-anchor': 'middle', fill: 'var(--sign-ink)', 'font-size': 15, 'font-weight': 800, 'font-family': 'var(--font-display)' }, inner);
+    p.textContent = 'P';
+    el('rect', { x: -13, y: -38, width: 26, height: 10, rx: 5, fill: 'var(--surface)', stroke: color, 'stroke-width': 1 }, inner);
+    const lt = el('text', { x: 0, y: -30.6, 'text-anchor': 'middle', fill: 'var(--fg)', 'font-size': 7, 'font-weight': 700, 'font-family': 'var(--font-body)' }, inner);
+    lt.textContent = mine ? 'senin yerin' : label;
+    if (mine) { lt.setAttribute('font-size', 5.6); }
+    const select = (e) => { e.stopPropagation(); S.selectedId = d.id; render(); };
+    pin.addEventListener('click', select);
+    pin.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') select(e); });
+  }
+}
+
+function drawActors() {
+  const g = $('actors'); g.replaceChildren();
+  if (S.tab === 'seek') {
+    el('circle', { cx: ME.x, cy: ME.y, r: 11, fill: 'var(--sign)', 'fill-opacity': 0.15 }, g);
+    el('circle', { cx: ME.x, cy: ME.y, r: 5, fill: 'var(--sign)', stroke: 'var(--sign-ink)', 'stroke-width': 2 }, g);
+    const t = el('text', { x: ME.x + 9, y: ME.y + 3, fill: 'var(--fg)', 'font-size': 8, 'font-weight': 700, 'font-family': 'var(--font-body)' }, g);
+    t.textContent = 'Sen';
+  }
+  if (S.sim && S.sim.pos) {
+    const p = S.sim.pos;
+    if (S.sim.phase === 'drive') {
+      const w = S.sim.horiz ? 13 : 6, hh = S.sim.horiz ? 6 : 13;
+      el('rect', { x: p.x - w / 2, y: p.y - hh / 2, width: w, height: hh, rx: 2, fill: 'var(--mine)' }, g);
+    } else {
+      el('circle', { cx: p.x, cy: p.y, r: 4.5, fill: 'var(--go)', stroke: 'var(--sign-ink)', 'stroke-width': 1.5 }, g);
+    }
+  }
+}
+
+// ---------- alt panel ----------
+function sheetSeek() {
+  const t = now();
+  const claim = myClaim();
+  const sel = live().find((d) => d.id === S.selectedId);
+  if (claim) {
+    return [
+      h('h2', { text: 'Yer sana ayrıldı' }),
+      h('div', { class: 'meta' }, h('span', { class: 'chip go', text: `${fmtDist(meters(claim, ME))}` }), h('span', { class: 'chip', text: `${titleCase(claim.street)}` }), h('span', { class: 'chip', text: `${mins(claim.expiresAt - t)} dk boyunca senin` })),
+      h('p', { text: 'Başka sürücüler bu yeri "yolda" olarak görüyor ve sahiplenemiyor. Uygulamada burada yol tarifi açılır.' }),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn go', onclick: () => finishClaim(claim, true) }, 'Park ettim'),
+        h('button', { class: 'btn warn', onclick: () => finishClaim(claim, false) }, 'Yer doluydu')),
+      h('button', { class: 'link', onclick: () => finishClaim(claim, null) }, 'Vazgeç'),
+    ];
+  }
+  if (sel) {
+    const readyAt = sel.createdAt + sel.leavingInMin * 60000;
+    const upcoming = readyAt > t;
+    const mine = sel.ownerId === DEVICE;
+    const other = sel.status === 'claimed' && sel.claimedBy !== DEVICE;
+    return [
+      h('h2', { text: mine ? 'Senin paylaştığın yer' : upcoming ? 'Birazdan boşalacak yer' : 'Boşalan park yeri' }),
+      h('div', { class: 'meta' },
+        h('span', { class: 'chip sign', text: fmtDist(meters(sel, ME)) }),
+        h('span', { class: 'chip', text: titleCase(sel.street) }),
+        h('span', { class: 'chip', text: upcoming ? `~${mins(readyAt - t)} dk içinde çıkacak` : `${ago(readyAt, t)} boşaldı` }),
+        sel.source === 'auto' ? h('span', { class: 'chip go', text: 'otomatik algılandı' }) : h('span', { class: 'chip', text: 'sürücü bildirdi' })),
+      other ? h('p', { text: 'Başka bir sürücü bu yere gidiyor.' })
+        : mine ? h('p', { text: 'Başka bir telefondan bu linki açarsan bu yeri orada görürsün.' })
+        : h('button', { class: 'btn go', onclick: () => doClaim(sel) }, 'Gidiyorum'),
+      h('button', { class: 'link', onclick: () => { S.selectedId = null; render(); } }, 'Kapat'),
+    ];
+  }
+  const n = live().filter((d) => d.status === 'active' && d.ownerId !== DEVICE).length;
+  return [
+    h('h2', { text: n ? `Yakınında ${n} boş yer var` : 'Şu an boşalan yer yok' }),
+    h('p', { text: n ? 'Haritada P işaretine dokun, "Gidiyorum" de; yer sana ayrılsın.'
+      : 'Yeni yer açıldığında burada belirir ve titreşimle haber veririz. Denemek için "Aracım" sekmesinden yerini paylaş ya da bu linki ikinci bir telefonda aç.' }),
+    h('div', { class: 'legend' },
+      h('span', {}, h('i', { style: 'background:var(--sign)' }), 'boşaldı'),
+      h('span', {}, h('i', { style: 'background:var(--soon)' }), 'birazdan boşalacak'),
+      h('span', {}, h('i', { style: 'background:var(--wait)' }), 'başkası yolda'),
+      h('span', {}, h('i', { style: 'background:var(--go)' }), 'sana ayrıldı')),
+  ];
+}
+
+function sheetCar() {
+  const t = now();
+  if (S.sim) return simSheet();
+  const mine = mySignal();
+  if (mine) {
+    return [
+      h('h2', { text: 'Yerin paylaşıldı' }),
+      h('div', { class: 'meta' },
+        h('span', { class: mine.status === 'claimed' ? 'chip wait' : 'chip sign', text: mine.status === 'claimed' ? 'bir sürücü yolda' : 'yakındakiler görüyor' }),
+        h('span', { class: 'chip', text: titleCase(mine.street) }),
+        h('span', { class: 'chip', text: `${mins(mine.expiresAt - t)} dk daha görünür` })),
+      h('p', { text: mine.status === 'claimed' ? 'Bir sürücü "Gidiyorum" dedi. Teşekkürler!' : '"Yer arıyorum" sekmesinde ya da başka bir telefonda bu sinyali görebilirsin.' }),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn warn', onclick: undoSignal }, 'Geri al'),
+        !S.car ? h('button', { class: 'btn ghost', onclick: () => { switchTab('seek'); } }, 'Haritada gör') : null),
+    ];
+  }
+  if (S.car) {
+    const bay = bayById.get(S.car.bayId);
+    return [
+      h('h2', { text: 'Aracın park halinde' }),
+      h('div', { class: 'meta' }, h('span', { class: 'chip', text: titleCase(bay.street) }), h('span', { class: 'chip', text: `${ago(S.car.since, t)} ${S.car.source === 'auto' ? 'algılandı' : 'kaydedildi'}` })),
+      h('p', { text: 'Gerçek uygulamada bu adımda hiçbir şeye dokunmazsın: araca binip kalktığında telefon anlar. Aşağıdaki simülasyon o anı GPS ve hareket verisiyle canlandırır.' }),
+      h('button', { class: 'btn', onclick: startSim }, '▶ Araca dön ve kalk (simülasyon)'),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn go', onclick: () => leaveManual(0) }, 'Çıkıyorum'),
+        h('button', { class: 'btn soon', onclick: () => leaveManual(5) }, '5 dk sonra çıkıyorum')),
+      h('button', { class: 'link', onclick: () => { setCar(null); render(); } }, 'Park kaydını sil'),
+    ];
+  }
+  return [
+    h('h2', { text: 'Aracını park et' }),
+    h('p', { text: 'Haritada kesikli çizgili boş ceplerden birine dokun. Gerçek uygulama bunu sen arabadan inip yürüdüğünde kendisi kaydeder.' }),
+    h('button', { class: 'btn dark', onclick: () => { const free = bays.filter((b) => !occupiedStatic(b) && !live().some((d) => d.bayId === b.id)); parkAt(free[hash(DEVICE + Date.now()) % free.length], 'manual'); } }, 'Benim için bir cep seç'),
+  ];
+}
+
+function simSheet() {
+  const sim = S.sim;
+  const motionTr = { walking: 'yürüyor', stationary: 'duruyor', automotive: 'araçta' }[sim.motion] || '—';
+  const phaseTr = { idle: 'BEKLİYOR', parked: 'PARK HALİNDE', driving: 'SÜRÜŞTE' }[sim.det.phase];
+  const log = h('div', { class: 'log', id: 'simlog' }, ...sim.log.map((l) => h('div', { class: l.cls || '' }, `${l.t}  ${l.msg}`)));
+  return [
+    h('h2', { text: 'Simülasyon: araca dönüş ve kalkış' }),
+    h('div', { class: 'sensor' },
+      h('div', {}, h('small', { text: 'GPS hızı' }), h('b', { text: `${Math.round(sim.speed * 3.6)} km/s` })),
+      h('div', {}, h('small', { text: 'Hareket' }), h('b', { text: motionTr })),
+      h('div', {}, h('small', { text: 'Algılama' }), h('b', { text: phaseTr }))),
+    log,
+    h('button', { class: 'link', onclick: stopSim }, sim.done ? 'Kapat' : 'Durdur'),
+  ];
+}
+
+function render() {
+  $('tabSeek').setAttribute('aria-selected', S.tab === 'seek');
+  $('tabCar').setAttribute('aria-selected', S.tab === 'car');
+  drawBays(); drawPins(); drawActors();
+  const sheet = $('sheet');
+  const prevLog = $('simlog');
+  const keepScroll = prevLog ? prevLog.scrollHeight - prevLog.scrollTop - prevLog.clientHeight < 8 : true;
+  sheet.replaceChildren(...(S.tab === 'seek' ? sheetSeek() : sheetCar()).filter(Boolean));
+  const nl = $('simlog'); if (nl && keepScroll) nl.scrollTop = nl.scrollHeight;
+}
+
+// ---------- eylemler ----------
+function switchTab(tab) { S.tab = tab; S.selectedId = null; store.set('tab', tab); render(); }
+function parkAt(bay, source) { if (!bay) return; setCar({ bayId: bay.id, since: now(), source }); toast(`Aracın ${titleCase(bay.street)} üzerinde kaydedildi`); render(); }
+
+async function leaveManual(leavingInMin) {
+  const bay = bayById.get(S.car.bayId);
+  if (await publish(bay, 'manual', leavingInMin)) {
+    if (leavingInMin === 0) setCar(null);
+    toast(leavingInMin ? 'Yakındakiler 5 dk içinde boşalacağını görüyor' : 'Yerin paylaşıldı');
+  }
+  render();
+}
+async function undoSignal() {
+  const s = mySignal(); if (!s) return;
+  if (await Data.patch(s.id, { status: 'cancelled' })) {
+    if (!S.car) setCar({ bayId: s.bayId, since: now(), source: 'manual' });
+    toast('Sinyal geri alındı, aracın yine park halinde');
+  }
+  render();
+}
+async function doClaim(sig) {
+  if (await Data.claim(sig.id)) { S.selectedId = null; toast('Yer sana ayrıldı, yola çık!'); }
+  else toast('Bu yer artık müsait değil, başka biri yola çıkmış olabilir.');
+  render();
+}
+async function finishClaim(sig, parked) {
+  const p = parked === true ? { status: 'taken', takenAt: now() } : parked === false ? { status: 'gone' } : { status: 'active', claimedBy: null, claimedAt: null };
+  if (await Data.patch(sig.id, p)) {
+    if (parked) { setCar({ bayId: sig.bayId, since: now(), source: 'manual' }); toast('Aracın buraya kaydedildi. Çıkarken yerin paylaşılacak.'); }
+  }
+  render();
+}
+
+// ---------- simülasyon: gerçek algılama motoru sahte GPS örnekleriyle ----------
+let simTimer = null;
+function startSim() {
+  const bay = bayById.get(S.car.bayId);
+  const dir = bay.horiz ? (bay.x < W / 2 ? 1 : -1) : (bay.y < H / 2 ? 1 : -1);
+  const along = (p, d) => (bay.horiz ? { x: p.x + d, y: p.y } : { x: p.x, y: p.y + d });
+  const lane = bay.horiz ? { x: bay.x, y: bay.y + (bay.y > H_STREETS.find((s) => s.name === bay.street).y ? -3 : 3) } : { x: bay.x + (bay.x > V_STREETS.find((s) => s.name === bay.street).x ? -3 : 3), y: bay.y };
+  const start = along(bay, -dir * 62); // ~155 m geride, yürüyerek dönüyor
+  const toM = (p) => ({ x: p.x * M_PER_UNIT, y: p.y * M_PER_UNIT });
+  // Senaryo: yürüyerek dön (1,4 m/s) → araçta bekle (motor) → hızlanarak ayrıl
+  const plan = [];
+  const STEP = 2; // sn
+  const walkU = 62, walkSpeedU = 1.4 / M_PER_UNIT;
+  for (let s = STEP; s * walkSpeedU <= walkU; s += STEP) plan.push({ phase: 'walk', p: along(bay, -dir * (walkU - s * walkSpeedU)), speed: 1.4, motion: 'walking' });
+  plan.push({ phase: 'walk', p: { x: bay.x, y: bay.y }, speed: 0.6, motion: 'walking', note: 'Araca ulaştı' });
+  for (let i = 0; i < 8; i++) plan.push({ phase: 'idle', p: { x: bay.x, y: bay.y }, speed: 0, motion: 'stationary', note: i === 2 ? 'Bindi, motoru çalıştırdı' : null });
+  let pos = 0; const accel = [1.5, 3, 4.5, 6.5, 8, 9, 9.5, 10, 10, 10, 10, 10, 10, 10];
+  for (const v of accel) { pos += (v * STEP) / M_PER_UNIT; plan.push({ phase: 'drive', p: along(lane, dir * pos), speed: v, motion: v > 2 ? 'automotive' : 'stationary' }); }
+
+  const t0 = now();
+  S.sim = {
+    plan, i: 0, horiz: bay.horiz, bay, pos: start, phase: 'walk', speed: 0, motion: 'walking', done: false,
+    det: markParked(INITIAL, toM(bay), t0 - 2 * 3600000), log: [],
+    t0,
+  };
+  // Başlangıç: araçtan uzakta (işte/kafede)
+  S.sim.det = step(S.sim.det, { ...toM(start), speed: 0, accuracy: 6, t: t0, motion: 'stationary' }).state;
+  addLog('Araçtan ~155 m uzaktasın, araç park halinde');
+  render();
+  const tick = async () => {
+    const sim = S.sim; if (!sim || sim.done) return;
+    const st = sim.plan[sim.i++];
+    if (!st) { sim.done = true; sim.pos = null; addLog('Simülasyon bitti'); render(); return; }
+    sim.pos = st.p; sim.phase = st.phase; sim.speed = st.speed; sim.motion = st.motion;
+    const sample = { ...toM(st.p), speed: st.speed, accuracy: 6, t: t0 + sim.i * STEP * 1000, motion: st.motion };
+    const r = step(sim.det, sample); sim.det = r.state;
+    if (st.note) addLog(st.note, 'ev');
+    for (const e of r.events) {
+      if (e.type === 'returningToCar') addLog('Olay: araca dönüyor → "Çıkıyorsan erken paylaş" bildirimi', 'ev');
+      if (e.type === 'departed') {
+        addLog(`Olay: KALKIŞ ALGILANDI (${Math.round(st.speed * 3.6)} km/s, cebe ${Math.round(dist(r.state.driveStart || sample, e.spot))} m)`, 'hit');
+        const ok = await publish(sim.bay, 'auto');
+        if (ok) { setCar(null); addLog('Sinyal haritaya gönderildi ✓', 'hit'); toast('Park yerin otomatik paylaşıldı'); }
+      }
+    }
+    render();
+    simTimer = setTimeout(tick, st.phase === 'walk' ? 140 : 320);
+  };
+  simTimer = setTimeout(tick, 500);
+}
+function addLog(msg, cls) {
+  const s = Math.round((((S.sim.i || 0) * 2)));
+  const mm = String(Math.floor(s / 60)).padStart(2, '0'), ss = String(s % 60).padStart(2, '0');
+  S.sim.log.push({ t: `${mm}:${ss}`, msg, cls });
+}
+function stopSim() { clearTimeout(simTimer); S.sim = null; render(); }
+
+// ---------- başlat ----------
+$('tabSeek').addEventListener('click', () => switchTab('seek'));
+$('tabCar').addEventListener('click', () => switchTab('car'));
+$('map').addEventListener('click', () => { if (S.selectedId) { S.selectedId = null; render(); } });
+Data.listeners.add(render);
+drawBase();
+setLive(false); $('liveText').textContent = 'Bağlanıyor…';
+render();
+Data.connect();
+setInterval(() => { if (!S.sim) render(); }, 10000);
+})();
+</script>
